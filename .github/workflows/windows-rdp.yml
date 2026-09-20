@@ -1,4 +1,4 @@
-name: Windows 11 RDP with Roblox Studio
+name: Windows 11 RDP Remote Access
 
 on:
   workflow_dispatch:
@@ -104,27 +104,6 @@ jobs:
           Write-Host "==================================="
           Write-Host "`n✓ Connected to Tailscale network"
 
-      - name: Download and install Roblox Studio
-        run: |
-          Write-Host "Downloading Roblox Studio installer..."
-          $studioUrl = "https://setup.rbxcdn.com/RobloxStudioLauncherBeta.exe"
-          $installerPath = "$env:TEMP\RobloxStudioInstaller.exe"
-          
-          Invoke-WebRequest -Uri $studioUrl -OutFile $installerPath -UseBasicParsing
-          
-          Write-Host "Installing Roblox Studio (this may take a few minutes)..."
-          Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -NoNewWindow
-          
-          Write-Host "✓ Roblox Studio installed"
-          
-          # Create desktop shortcut for easy access
-          $WshShell = New-Object -ComObject WScript.Shell
-          $Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Roblox Studio.lnk")
-          $Shortcut.TargetPath = "$env:LOCALAPPDATA\Roblox\Versions\RobloxStudioLauncherBeta.exe"
-          $Shortcut.Save()
-          
-          Write-Host "✓ Desktop shortcut created"
-
       - name: Optimize Windows for RDP performance
         run: |
           Write-Host "Applying performance optimizations..."
@@ -161,7 +140,7 @@ jobs:
           Write-Host "2. Open Windows App on your phone"
           Write-Host "3. Add PC with the Tailscale IP shown above"
           Write-Host "4. Check the RDP credentials in 'Create RDP user' step above"
-          Write-Host "5. Roblox Studio is installed and ready to use"
+          Write-Host "5. You can install any software you need from inside Windows"
           Write-Host "=================================="
           Write-Host "`nSession will stay alive for ${{ github.event.inputs.timeout_hours }} hours..."
           Write-Host "Press Ctrl+C in GitHub Actions to terminate early.`n"
