@@ -33,11 +33,20 @@ jobs:
       - name: Create RDP user
         run: |
           $username = "${{ secrets.RDP_USERNAME }}"
-          $password = ConvertTo-SecureString "${{ secrets.RDP_PASSWORD }}" -AsPlainText -Force
+          $rawPassword = "${{ secrets.RDP_PASSWORD }}"
+          
+          # Validate and strengthen password if needed
+          if ($rawPassword.Length -lt 8 -or $rawPassword -notmatch '[A-Z]' -or $rawPassword -notmatch '[a-z]' -or $rawPassword -notmatch '[0-9]' -or $rawPassword -notmatch '[^a-zA-Z0-9]') {
+            Write-Host "⚠ Provided password too weak, generating strong password..."
+            $rawPassword = "Rb!$(Get-Random -Minimum 1000 -Maximum 9999)X$(Get-Random -Minimum 100 -Maximum 999)@Studio"
+            Write-Host "Generated password: $rawPassword"
+          }
+          
+          $password = ConvertTo-SecureString $rawPassword -AsPlainText -Force
           
           # Create user if doesn't exist
           if (-not (Get-LocalUser -Name $username -ErrorAction SilentlyContinue)) {
-            New-LocalUser -Name $username -Password $password -PasswordNeverExpires -AccountNeverExpires
+            New-LocalUser -Name $username -Password $password -PasswordNeverExpires -AccountNeverExpires -Description "RDP user for Roblox Studio"
             Write-Host "✓ User $username created"
           } else {
             Set-LocalUser -Name $username -Password $password
