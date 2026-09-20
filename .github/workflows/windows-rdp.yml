@@ -122,9 +122,8 @@ jobs:
           Set-Service -Name "WSearch" -StartupType Disabled -ErrorAction SilentlyContinue
           
           # Set virtual memory to system managed (Automatic)
-          $cs = Get-WmiObject -Class Win32_ComputerSystem -EnableAllPrivileges
-          $cs.AutomaticManagedPagefile = $true
-          $cs.Put() | Out-Null
+          $cs = Get-CimInstance -ClassName Win32_ComputerSystem
+          $cs | Invoke-CimMethod -MethodName SetAutomaticManagedPagefile -Arguments @{AutomaticManagedPagefile=$true} -ErrorAction SilentlyContinue
           
           # Set power plan to High Performance
           powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
