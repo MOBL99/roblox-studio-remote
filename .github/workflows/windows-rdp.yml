@@ -108,20 +108,31 @@ jobs:
         run: |
           Write-Host "Applying performance optimizations..."
           
-          # Disable visual effects for better performance
+          # Set visual effects to "Adjust for best performance"
           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
           
-          # Disable Windows Search indexing for better performance
+          # Disable specific visual effects
+          $path = "HKCU:\Control Panel\Desktop"
+          Set-ItemProperty -Path $path -Name "DragFullWindows" -Value "0" -Force
+          Set-ItemProperty -Path $path -Name "MenuShowDelay" -Value "0" -Force
+          Set-ItemProperty -Path $path -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)) -Force
+          
+          # Disable Windows Search indexing
           Stop-Service -Name "WSearch" -Force -ErrorAction SilentlyContinue
           Set-Service -Name "WSearch" -StartupType Disabled -ErrorAction SilentlyContinue
+          
+          # Set virtual memory to system managed (Automatic)
+          $cs = Get-WmiObject -Class Win32_ComputerSystem -EnableAllPrivileges
+          $cs.AutomaticManagedPagefile = $true
+          $cs.Put() | Out-Null
           
           # Set power plan to High Performance
           powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
           
-          # Disable Windows Defender real-time protection (for better performance)
+          # Disable Windows Defender real-time protection
           Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
           
-          Write-Host "✓ Performance optimizations applied"
+          Write-Host "✓ Performance optimizations applied (Best Performance + Auto Virtual Memory)"
 
       - name: System information
         run: |
