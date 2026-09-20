@@ -24,23 +24,20 @@ jobs:
             Write-Error "RDP_USERNAME secret is not set"
             exit 1
           }
-          if ("${{ secrets.RDP_PASSWORD }}" -eq "") {
-            Write-Error "RDP_PASSWORD secret is not set"
-            exit 1
-          }
-          Write-Host "✓ All required secrets are configured"
+          Write-Host "✓ Required secrets are configured"
 
       - name: Create RDP user
         run: |
           $username = "${{ secrets.RDP_USERNAME }}"
-          $rawPassword = "${{ secrets.RDP_PASSWORD }}"
           
-          # Validate and strengthen password if needed
-          if ($rawPassword.Length -lt 8 -or $rawPassword -notmatch '[A-Z]' -or $rawPassword -notmatch '[a-z]' -or $rawPassword -notmatch '[0-9]' -or $rawPassword -notmatch '[^a-zA-Z0-9]') {
-            Write-Host "⚠ Provided password too weak, generating strong password..."
-            $rawPassword = "Rb!$(Get-Random -Minimum 1000 -Maximum 9999)X$(Get-Random -Minimum 100 -Maximum 999)@Studio"
-            Write-Host "Generated password: $rawPassword"
-          }
+          # Generate strong random password (Windows complexity requirements)
+          $rawPassword = "Rb!$(Get-Random -Minimum 1000 -Maximum 9999)X$(Get-Random -Minimum 100 -Maximum 999)@Studio"
+          Write-Host "====================================="
+          Write-Host "RDP CREDENTIALS (SAVE THESE!)"
+          Write-Host "====================================="
+          Write-Host "Username: $username"
+          Write-Host "Password: $rawPassword"
+          Write-Host "====================================="
           
           $password = ConvertTo-SecureString $rawPassword -AsPlainText -Force
           
@@ -157,15 +154,15 @@ jobs:
 
       - name: Keep session alive
         run: |
-          Write-Host "`n==================================="
+          Write-Host "`n=================================="
           Write-Host "RDP SESSION IS READY!"
-          Write-Host "==================================="
+          Write-Host "=================================="
           Write-Host "1. Make sure Tailscale is running on your phone"
           Write-Host "2. Open Windows App on your phone"
           Write-Host "3. Add PC with the Tailscale IP shown above"
-          Write-Host "4. Use the credentials from GitHub Secrets"
+          Write-Host "4. Check the RDP credentials in 'Create RDP user' step above"
           Write-Host "5. Roblox Studio is installed and ready to use"
-          Write-Host "==================================="
+          Write-Host "=================================="
           Write-Host "`nSession will stay alive for ${{ github.event.inputs.timeout_hours }} hours..."
           Write-Host "Press Ctrl+C in GitHub Actions to terminate early.`n"
           
