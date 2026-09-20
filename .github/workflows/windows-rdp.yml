@@ -1,0 +1,172 @@
+name: Windows 11 RDP with Roblox Studio
+
+on:
+  workflow_dispatch:
+    inputs:
+      timeout_hours:
+        description: 'Session timeout in hours (max 6)'
+        required: false
+        default: '5'
+
+jobs:
+  setup-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360
+    
+    steps:
+      - name: Validate secrets
+        run: |
+          if ("${{ secrets.TAILSCALE_AUTH_KEY }}" -eq "") {
+            Write-Error "TAILSCALE_AUTH_KEY secret is not set"
+            exit 1
+          }
+          if ("${{ secrets.RDP_USERNAME }}" -eq "") {
+            Write-Error "RDP_USERNAME secret is not set"
+            exit 1
+          }
+          if ("${{ secrets.RDP_PASSWORD }}" -eq "") {
+            Write-Error "RDP_PASSWORD secret is not set"
+            exit 1
+          }
+          Write-Host "✓ All required secrets are configured"
+
+      - name: Create RDP user
+        run: |
+          $username = "${{ secrets.RDP_USERNAME }}"
+          $password = ConvertTo-SecureString "${{ secrets.RDP_PASSWORD }}" -AsPlainText -Force
+          
+          # Create user if doesn't exist
+          if (-not (Get-LocalUser -Name $username -ErrorAction SilentlyContinue)) {
+            New-LocalUser -Name $username -Password $password -PasswordNeverExpires -AccountNeverExpires
+            Write-Host "✓ User $username created"
+          } else {
+            Set-LocalUser -Name $username -Password $password
+            Write-Host "✓ User $username password updated"
+          }
+          
+          # Add to necessary groups
+          Add-LocalGroupMember -Group "Administrators" -Member $username -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username -ErrorAction SilentlyContinue
+          
+          Write-Host "✓ User added to Administrators and Remote Desktop Users groups"
+
+      - name: Configure RDP settings
+        run: |
+          # Enable RDP
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          
+          # Allow RDP through firewall
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          
+          # Disable Network Level Authentication for easier connection
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+          
+          # Set RDP port (default 3389)
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "PortNumber" -Value 3389
+          
+          Write-Host "✓ RDP configured and enabled"
+
+      - name: Install Tailscale
+        run: |
+          Write-Host "Downloading Tailscale..."
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile "$env:TEMP\tailscale.msi"
+          
+          Write-Host "Installing Tailscale..."
+          Start-Process msiexec.exe -ArgumentList "/i", "$env:TEMP\tailscale.msi", "/quiet", "/qn", "/norestart" -Wait
+          
+          # Wait for service to be ready
+          Start-Sleep -Seconds 10
+          
+          Write-Host "✓ Tailscale installed"
+
+      - name: Connect to Tailscale
+        run: |
+          Write-Host "Connecting to Tailscale..."
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="${{ secrets.TAILSCALE_AUTH_KEY }}" --hostname="github-roblox-${{ github.run_id }}"
+          
+          Start-Sleep -Seconds 5
+          
+          Write-Host "`n==================================="
+          Write-Host "TAILSCALE CONNECTION INFO"
+          Write-Host "==================================="
+          & "C:\Program Files\Tailscale\tailscale.exe" status
+          Write-Host "-----------------------------------"
+          $ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+          Write-Host "Tailscale IP: $ip"
+          Write-Host "Hostname: github-roblox-${{ github.run_id }}"
+          Write-Host "Username: ${{ secrets.RDP_USERNAME }}"
+          Write-Host "==================================="
+          Write-Host "`n✓ Connected to Tailscale network"
+
+      - name: Download and install Roblox Studio
+        run: |
+          Write-Host "Downloading Roblox Studio installer..."
+          $studioUrl = "https://setup.rbxcdn.com/RobloxStudioLauncherBeta.exe"
+          $installerPath = "$env:TEMP\RobloxStudioInstaller.exe"
+          
+          Invoke-WebRequest -Uri $studioUrl -OutFile $installerPath -UseBasicParsing
+          
+          Write-Host "Installing Roblox Studio (this may take a few minutes)..."
+          Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -NoNewWindow
+          
+          Write-Host "✓ Roblox Studio installed"
+          
+          # Create desktop shortcut for easy access
+          $WshShell = New-Object -ComObject WScript.Shell
+          $Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\Roblox Studio.lnk")
+          $Shortcut.TargetPath = "$env:LOCALAPPDATA\Roblox\Versions\RobloxStudioLauncherBeta.exe"
+          $Shortcut.Save()
+          
+          Write-Host "✓ Desktop shortcut created"
+
+      - name: Optimize Windows for RDP performance
+        run: |
+          Write-Host "Applying performance optimizations..."
+          
+          # Disable visual effects for better performance
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
+          
+          # Disable Windows Search indexing for better performance
+          Stop-Service -Name "WSearch" -Force -ErrorAction SilentlyContinue
+          Set-Service -Name "WSearch" -StartupType Disabled -ErrorAction SilentlyContinue
+          
+          # Set power plan to High Performance
+          powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+          
+          # Disable Windows Defender real-time protection (for better performance)
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          
+          Write-Host "✓ Performance optimizations applied"
+
+      - name: System information
+        run: |
+          Write-Host "`n==================================="
+          Write-Host "SYSTEM INFORMATION"
+          Write-Host "==================================="
+          Get-ComputerInfo | Select-Object WindowsVersion, OsArchitecture, CsProcessors, CsTotalPhysicalMemory, OsName
+          Write-Host "==================================="
+
+      - name: Keep session alive
+        run: |
+          Write-Host "`n==================================="
+          Write-Host "RDP SESSION IS READY!"
+          Write-Host "==================================="
+          Write-Host "1. Make sure Tailscale is running on your phone"
+          Write-Host "2. Open Windows App on your phone"
+          Write-Host "3. Add PC with the Tailscale IP shown above"
+          Write-Host "4. Use the credentials from GitHub Secrets"
+          Write-Host "5. Roblox Studio is installed and ready to use"
+          Write-Host "==================================="
+          Write-Host "`nSession will stay alive for ${{ github.event.inputs.timeout_hours }} hours..."
+          Write-Host "Press Ctrl+C in GitHub Actions to terminate early.`n"
+          
+          $timeoutMinutes = [int]"${{ github.event.inputs.timeout_hours }}" * 60
+          $elapsed = 0
+          
+          while ($elapsed -lt $timeoutMinutes) {
+            Write-Host "Session active - $elapsed minutes elapsed (max: $timeoutMinutes minutes)"
+            Start-Sleep -Seconds 300  # Status update every 5 minutes
+            $elapsed += 5
+          }
+          
+          Write-Host "`nSession timeout reached. Disconnecting..."
